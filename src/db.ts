@@ -187,7 +187,9 @@ export const SEED_USERS: User[] = [
   { id: 'u7', name: 'Rahul Verma', email: 'corrective.mine.a@coaltech.in', role: 'Corrective Officer', scope: 'mine:m1', mineId: 'm1', areaId: 'a1', department: 'Operations' },
   { id: 'u8', name: 'Pankaj Gupta', email: 'contractor@abcmining.in', role: 'Contractor Manager', scope: 'mine:m1', mineId: 'm1', areaId: 'a1' },
   { id: 'u9', name: 'Anil Yadav', email: 'anil.yadav@coaltech.in', role: 'Worker', scope: 'mine:m1', mineId: 'm1', areaId: 'a1', department: 'Excavation', shift: 'Morning Shift (A)' },
-  { id: 'u10', name: 'Dr. Satish Deshmukh', email: 'regulator@dgms.gov.in', role: 'Regulatory Authority', scope: 'all' }
+  { id: 'u10', name: 'Dr. Satish Deshmukh', email: 'regulator@dgms.gov.in', role: 'Regulatory Authority', scope: 'all' },
+  { id: 'u11', name: 'Alok Roy', email: 'finance@coaltech.in', role: 'Finance Officer', scope: 'all', department: 'Corporate Accounts & Penalties' },
+  { id: 'u12', name: 'Vikramaditya Rao', email: 'transport.head@coaltech.in', role: 'Transportation Head', scope: 'all', department: 'Haulage & Dispatch Logistics' }
 ];
 
 export const SEED_AREAS: Area[] = [
@@ -616,6 +618,12 @@ export const initializeDatabase = () => {
     localStorage.setItem('coaltech_blockchain_events', JSON.stringify([]));
     localStorage.setItem('coaltech_notifications', JSON.stringify([]));
     localStorage.setItem('coaltech_offline_queue', JSON.stringify([]));
+    localStorage.setItem('coaltech_movements', JSON.stringify([]));
+    localStorage.setItem('coaltech_fleet_vehicles', JSON.stringify([]));
+    localStorage.setItem('coaltech_fleet_drivers', JSON.stringify([]));
+    localStorage.setItem('coaltech_fleet_maintenance', JSON.stringify([]));
+    localStorage.setItem('coaltech_fuel_logs', JSON.stringify([]));
+    localStorage.setItem('coaltech_logistics_expenses', JSON.stringify([]));
     localStorage.setItem('coaltech_settings', JSON.stringify({
       escalationHours: 24, // Escalates after 24 hrs
       weights: { severity: 0.3, recurrence: 0.2, overdue: 0.15, exposure: 0.15, history: 0.1, location: 0.1 }
@@ -623,3 +631,4 @@ export const initializeDatabase = () => {
     localStorage.setItem('coaltech_initialized', 'true');
   }
 };
+

@@ -1,4 +1,4 @@
-// MINEGOV AI - AI Risk Intelligence & Regulatory Assistant Module
+// COALTECH - AI Risk Intelligence & Regulatory Assistant Module
 import React, { useState } from 'react';
 import { useGovernance } from '../../context/GovernanceContext';
 import { useI18n } from '../../context/I18nContext';
@@ -20,7 +20,7 @@ export const AIRiskModule: React.FC = () => {
   const [chatLogs, setChatLogs] = useState<{ sender: 'user' | 'ai'; text: string; data?: any[] }[]>([
     {
       sender: 'ai',
-      text: 'Greetings. I am the MINEGOV Statutory Intelligence Assistant. Ask me anything regarding mine hazard levels, overdue corrective actions, or vendor risk scores.',
+      text: 'Greetings. I am the CoalTech Statutory Intelligence Assistant. Ask me anything regarding mine hazard levels, overdue corrective actions, transportation discrepancies, or vendor risk scores.',
     },
   ]);
 

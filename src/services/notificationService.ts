@@ -1,4 +1,4 @@
-// MINEGOV AI - Multi-Channel Notification Service Abstraction
+// COALTECH - Multi-Channel Notification Service Abstraction
 // Simulated delivery adapter for In-App, SMS (Twilio/Karix), Email (SendGrid), WhatsApp (Gupshup/Twilio API).
 // Clearly labeled prototype service.
 
@@ -29,9 +29,9 @@ export async function dispatchMultiChannelNotifications(
         title: `[${channel.toUpperCase()}] ${params.title}`,
         message:
           channel === 'voice'
-            ? `MINEGOV Automated Voice Alert: Urgent attention required. ${params.message}`
+            ? `CoalTech Automated Voice Alert: Urgent attention required. ${params.message}`
             : channel === 'whatsapp'
-            ? `*MINEGOV STATUTORY ALERT*\n${params.message}\n_Immediate action required._`
+            ? `*COALTECH STATUTORY ALERT*\n${params.message}\n_Immediate action required._`
             : params.message,
         severity: params.severity,
         timestamp: now,

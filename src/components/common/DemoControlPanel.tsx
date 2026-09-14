@@ -10,11 +10,16 @@ import {
   WifiOff,
   Mic,
   AlertOctagon,
-  CheckCircle2,
-  XCircle,
   ChevronDown,
   ChevronUp,
+  Truck,
+  Mountain,
+  Wrench,
+  Radio,
+  FileCheck2,
+  Shield
 } from 'lucide-react';
+import { SEED_USERS } from '../../data/seedData';
 
 interface DemoControlPanelProps {
   onNavigateTab: (tab: string) => void;
@@ -24,10 +29,13 @@ interface DemoControlPanelProps {
 export const DemoControlPanel: React.FC<DemoControlPanelProps> = ({ onNavigateTab, onShowToast }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
+  const [activeScenarioTab, setActiveScenarioTab] = useState<'scenarios' | 'roles' | 'quick'>('scenarios');
   const { t } = useI18n();
 
   const {
     violations,
+    coalMovements,
+    recordWeighbridgeReceipt,
     submitReport,
     assignViolation,
     submitCorrectiveAction,
@@ -37,6 +45,12 @@ export const DemoControlPanel: React.FC<DemoControlPanelProps> = ({ onNavigateTa
     toggleOfflineMode,
     syncOfflineQueue,
     isOffline,
+    currentUser,
+    quickSwitchUser,
+    reportHemmBreakdown,
+    complianceItems,
+    addEnvironmentalReading,
+    updateComplianceStatus,
   } = useGovernance();
 
   // Scenario 1: Step 1 - Field Worker reports water accumulation near substation
@@ -128,19 +142,113 @@ export const DemoControlPanel: React.FC<DemoControlPanelProps> = ({ onNavigateTa
       return;
     }
     setActiveStep(5);
-    // Submit final proof
     submitCorrectiveAction(
       target.id,
       'Auxiliary sump discharge line rerouted 15m away from cable trench. Complete moisture barrier installed.',
       'https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=400&q=80',
       'Secondary verification confirms 100% dry trench and normal insulator resistance.'
     );
-    // Approve
     setTimeout(() => {
       verifyCorrectiveAction(target.id, true, 'Inspected and certified compliant under CMR 2017.');
       onShowToast('Step 5: Inspector APPROVED closure! Risk cleared and transaction anchored to Blockchain.', 'success');
       onNavigateTab('audit-trail');
     }, 400);
+  };
+
+  // SCENARIO 2: Transport Loss (1000T Dispatch → 970T Receipt = 30T Discrepancy & CAPA)
+  const handleScenario2 = () => {
+    let target = coalMovements.find((m) => m.id === 'CM-2026-1013');
+    if (!target) {
+      target = coalMovements.find((m) => m.status === 'IN_TRANSIT' || m.status === 'DISPATCHED');
+    }
+    if (target) {
+      const tare = target.dispatchedTareTonnes;
+      const receivedGross = tare + 970.0;
+      recordWeighbridgeReceipt(
+        target.id,
+        receivedGross,
+        tare,
+        false,
+        'Statutory Siding Discrepancy: En-route Shortage of 30.00 MT (1000T Dispatched → 970T Received). Electronic seal tampered.'
+      );
+      onShowToast(
+        `Scenario 2 Complete: 1000T Dispatched → 970T Received (-30 MT Variance). Critical CAPA & Audit Flagged!`,
+        'warning'
+      );
+      onNavigateTab('transportation-reconciliation');
+    } else {
+      onShowToast('No active movement available. Please reset demo data to reload CM-2026-1013.', 'error');
+    }
+  };
+
+  // SCENARIO 3: Worker Shift Overlap & 8h Daily Limit Conflict
+  const handleScenario3 = () => {
+    onShowToast(
+      'Scenario 3: Worker w9 (Ganesh Kewat) 8.0h limit reached; Worker w5 cross-mine assignment blocked under CMR 2017 & Mines Act Sec 33.',
+      'error'
+    );
+    onNavigateTab('workforce');
+  };
+
+  // SCENARIO 4: Vehicle Maintenance Dispatch Lock
+  const handleScenario4 = () => {
+    onShowToast(
+      'Scenario 4: Vehicle V-305 is in Workshop Maintenance. Siding Dispatch Wizard deterministically blocks haulage clearance.',
+      'warning'
+    );
+    onNavigateTab('transportation-maintenance');
+  };
+
+  // SCENARIO 5: Expired Driver Commercial License
+  const handleScenario5 = () => {
+    onShowToast(
+      'Scenario 5: Driver D-508 (Shyamal Murmu) Commercial Heavy Vehicle License is Expired. Statutory assignment blocked.',
+      'error'
+    );
+    onNavigateTab('transportation-drivers');
+  };
+
+  // SCENARIO 6: Environmental Sensor Anomaly Spike
+  const handleScenario6 = () => {
+    addEnvironmentalReading('m1', 'Methane Level (CH4)', 1.85);
+    onShowToast(
+      'Scenario 6 Complete: Methane CH4 spiked to 1.85% (Statutory Ceiling: 1.25%)! Environmental Task & Alert triggered.',
+      'error'
+    );
+    onNavigateTab('environment');
+  };
+
+  // SCENARIO 7: HEMM Dump Truck Overheat & Work Order
+  const handleScenario7 = () => {
+    reportHemmBreakdown({
+      assetId: 'HEMM-104',
+      assetName: 'Dump Truck HT-04',
+      assetType: 'Rear Dump Truck (100T)',
+      mineId: 'm1',
+      reportedAt: new Date().toISOString().split('T')[0],
+      location: 'Haul Road Incline Ramp 3',
+      operatorName: 'Someshwar Roy',
+      failureCategory: 'ENGINE_OVERHEAT',
+      description: 'Coolant temperature spiked to 108°C; auxiliary radiator fan relay faulted during loaded climb',
+      severity: 'HIGH',
+      downtimeHours: 0,
+      assignedTechnician: 'Rameshwar Tudu',
+    });
+    onShowToast('Scenario 7: Dump Truck HT-04 engine overheat breakdown logged; Work order & technician assigned.', 'warning');
+    onNavigateTab('hemm-assets');
+  };
+
+  // SCENARIO 8: Overdue Statutory Compliance Mandate
+  const handleScenario8 = () => {
+    const comp = complianceItems.find((c) => c.status !== 'Compliant') || complianceItems[0];
+    if (comp) {
+      updateComplianceStatus(comp.id, 'Violation');
+      onShowToast(
+        `Scenario 8 Complete: Mandate "${comp.requirement.substring(0, 32)}..." marked Violation! Automated CAPA generated.`,
+        'warning'
+      );
+      onNavigateTab('compliance');
+    }
   };
 
   // Hindi Voice Simulation
@@ -179,17 +287,17 @@ export const DemoControlPanel: React.FC<DemoControlPanelProps> = ({ onNavigateTa
           className="flex items-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white rounded-full shadow-2xl font-bold text-xs border border-sky-400/30 transition transform hover:scale-105"
         >
           <Sparkles className="w-4 h-4 text-amber-300" />
-          <span>{t('demo_title', 'SIH Sandbox Demo Controls')}</span>
+          <span>{t('demo_title', 'SIH Demo Controls & Scenarios')}</span>
           <ChevronUp className="w-4 h-4" />
         </button>
       ) : (
         /* Expanded Control Panel */
-        <div className="w-96 bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl p-4 text-white text-xs space-y-3 relative backdrop-blur-md">
+        <div className="w-[420px] max-h-[85vh] overflow-y-auto bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl p-4 text-white text-xs space-y-3 relative backdrop-blur-md">
           <div className="flex items-center justify-between pb-2 border-b border-slate-800">
             <div className="flex items-center space-x-2">
               <Sparkles className="w-4 h-4 text-amber-400" />
               <span className="font-extrabold text-sm tracking-tight text-white">
-                {t('demo_title', 'SIH Demo Scenario Controller')}
+                CoalTech Evaluator Showcase & Control Panel
               </span>
             </div>
             <button
@@ -200,153 +308,318 @@ export const DemoControlPanel: React.FC<DemoControlPanelProps> = ({ onNavigateTa
             </button>
           </div>
 
-          <p className="text-[11px] text-slate-400">
-            Execute the complete closed-loop critical risk scenario step-by-step for evaluators:
-          </p>
-
-          {/* Scenario 1: Closed-Loop Steps */}
-          <div className="space-y-1.5">
-            <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wider block">
-              Scenario: Closed-Loop Critical Hazard Lifecycle
-            </span>
-
+          {/* Sub-tabs */}
+          <div className="flex bg-slate-900 p-1 rounded-lg border border-slate-800">
             <button
-              onClick={handleStep1}
-              className={`w-full text-left p-2 rounded-lg border transition flex items-center justify-between ${
-                activeStep === 1
-                  ? 'bg-sky-500/20 border-sky-400 text-white font-semibold'
-                  : 'bg-slate-900 hover:bg-slate-850 border-slate-800 text-slate-300'
+              onClick={() => setActiveScenarioTab('scenarios')}
+              className={`flex-1 py-1 text-center rounded-md font-medium text-[11px] transition ${
+                activeScenarioTab === 'scenarios' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <span className="flex items-center">
-                <AlertOctagon className="w-3.5 h-3.5 text-red-400 mr-2 shrink-0" />
-                {t('demo_scenario_1', '1. Report Critical Hazard (Zone 4)')}
-              </span>
-              <Play className="w-3 h-3 text-sky-400" />
+              8 Scenarios
             </button>
-
             <button
-              onClick={handleStep2}
-              className={`w-full text-left p-2 rounded-lg border transition flex items-center justify-between ${
-                activeStep === 2
-                  ? 'bg-sky-500/20 border-sky-400 text-white font-semibold'
-                  : 'bg-slate-900 hover:bg-slate-850 border-slate-800 text-slate-300'
+              onClick={() => setActiveScenarioTab('roles')}
+              className={`flex-1 py-1 text-center rounded-md font-medium text-[11px] transition ${
+                activeScenarioTab === 'roles' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <span className="flex items-center">
-                <Play className="w-3.5 h-3.5 text-blue-400 mr-2 shrink-0" />
-                {t('demo_scenario_2', '2. Assign Rahul Verma (24h SLA)')}
-              </span>
-              <Play className="w-3 h-3 text-sky-400" />
+              Role Switch (RBAC)
             </button>
-
             <button
-              onClick={handleStep3}
-              className={`w-full text-left p-2 rounded-lg border transition flex items-center justify-between ${
-                activeStep === 3
-                  ? 'bg-sky-500/20 border-sky-400 text-white font-semibold'
-                  : 'bg-slate-900 hover:bg-slate-850 border-slate-800 text-slate-300'
+              onClick={() => setActiveScenarioTab('quick')}
+              className={`flex-1 py-1 text-center rounded-md font-medium text-[11px] transition ${
+                activeScenarioTab === 'quick' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <span className="flex items-center">
-                <CheckCircle2 className="w-3.5 h-3.5 text-amber-400 mr-2 shrink-0" />
-                {t('demo_scenario_3', '3. Submit Action Proof & Photo')}
-              </span>
-              <Play className="w-3 h-3 text-sky-400" />
-            </button>
-
-            <button
-              onClick={handleStep4}
-              className={`w-full text-left p-2 rounded-lg border transition flex items-center justify-between ${
-                activeStep === 4
-                  ? 'bg-sky-500/20 border-sky-400 text-white font-semibold'
-                  : 'bg-slate-900 hover:bg-slate-850 border-slate-800 text-slate-300'
-              }`}
-            >
-              <span className="flex items-center">
-                <XCircle className="w-3.5 h-3.5 text-rose-400 mr-2 shrink-0" />
-                {t('demo_scenario_4', '4. Inspector Rejects (Demand Rework)')}
-              </span>
-              <Play className="w-3 h-3 text-sky-400" />
-            </button>
-
-            <button
-              onClick={handleStep5}
-              className={`w-full text-left p-2 rounded-lg border transition flex items-center justify-between ${
-                activeStep === 5
-                  ? 'bg-sky-500/20 border-sky-400 text-white font-semibold'
-                  : 'bg-slate-900 hover:bg-slate-850 border-slate-800 text-slate-300'
-              }`}
-            >
-              <span className="flex items-center">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 mr-2 shrink-0" />
-                {t('demo_scenario_6', '5. Resubmit, Approve & Anchor Blockchain')}
-              </span>
-              <Play className="w-3 h-3 text-sky-400" />
+              Statutory Tests
             </button>
           </div>
 
-          {/* Quick Simulation Features */}
-          <div className="pt-2 border-t border-slate-800 space-y-1.5">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-              Additional Evaluator Demos
-            </span>
+          {/* Tab 1: 8 Canonical Scenarios */}
+          {activeScenarioTab === 'scenarios' && (
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wider block">
+                Canonical Evaluator Scenarios (1-Click Run)
+              </span>
 
-            <div className="grid grid-cols-2 gap-2">
+              {/* Scenario 1 dropdown or step by step */}
+              <div className="p-2 bg-slate-900 border border-slate-800 rounded-lg space-y-1.5">
+                <span className="text-[11px] font-bold text-amber-300 flex items-center justify-between">
+                  <span>Scenario 1: Closed-Loop Hazard (Zone 4)</span>
+                  <span className="text-[10px] font-mono text-slate-400">Step {activeStep}/5</span>
+                </span>
+                <div className="grid grid-cols-5 gap-1">
+                  <button
+                    onClick={handleStep1}
+                    className={`py-1 text-[10px] font-bold rounded border ${
+                      activeStep === 1 ? 'bg-sky-600 text-white border-sky-400' : 'bg-slate-950 text-slate-400 border-slate-800'
+                    }`}
+                  >
+                    1. Log
+                  </button>
+                  <button
+                    onClick={handleStep2}
+                    className={`py-1 text-[10px] font-bold rounded border ${
+                      activeStep === 2 ? 'bg-sky-600 text-white border-sky-400' : 'bg-slate-950 text-slate-400 border-slate-800'
+                    }`}
+                  >
+                    2. Assign
+                  </button>
+                  <button
+                    onClick={handleStep3}
+                    className={`py-1 text-[10px] font-bold rounded border ${
+                      activeStep === 3 ? 'bg-sky-600 text-white border-sky-400' : 'bg-slate-950 text-slate-400 border-slate-800'
+                    }`}
+                  >
+                    3. Proof
+                  </button>
+                  <button
+                    onClick={handleStep4}
+                    className={`py-1 text-[10px] font-bold rounded border ${
+                      activeStep === 4 ? 'bg-rose-600 text-white border-rose-400' : 'bg-slate-950 text-slate-400 border-slate-800'
+                    }`}
+                  >
+                    4. Rework
+                  </button>
+                  <button
+                    onClick={handleStep5}
+                    className={`py-1 text-[10px] font-bold rounded border ${
+                      activeStep === 5 ? 'bg-emerald-600 text-white border-emerald-400' : 'bg-slate-950 text-slate-400 border-slate-800'
+                    }`}
+                  >
+                    5. Close
+                  </button>
+                </div>
+              </div>
+
+              {/* Scenarios 2 to 8 */}
               <button
-                onClick={handleSimulateHindiVoice}
-                className="p-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-lg text-left flex items-center space-x-1.5"
+                onClick={handleScenario2}
+                className="w-full text-left p-2 rounded-lg bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 flex items-center justify-between transition"
               >
-                <Mic className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span className="text-[11px]">Hindi Voice Sim</span>
+                <span className="flex items-center gap-2">
+                  <Truck className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                  <span className="text-[11px] font-semibold">2. Transport Loss: 1000T → 970T (30T Variance)</span>
+                </span>
+                <Play className="w-3 h-3 text-sky-400" />
               </button>
 
               <button
-                onClick={handleSimulateSlaBreach}
-                className="p-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-lg text-left flex items-center space-x-1.5"
+                onClick={handleScenario3}
+                className="w-full text-left p-2 rounded-lg bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 flex items-center justify-between transition"
               >
-                <AlertOctagon className="w-3.5 h-3.5 text-orange-400 shrink-0" />
-                <span className="text-[11px]">SLA Breach Alert</span>
+                <span className="flex items-center gap-2">
+                  <Mountain className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span className="text-[11px] font-semibold">3. Worker Conflict: 8h Limit & Cross-Mine Overlap</span>
+                </span>
+                <Play className="w-3 h-3 text-sky-400" />
+              </button>
+
+              <button
+                onClick={handleScenario4}
+                className="w-full text-left p-2 rounded-lg bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 flex items-center justify-between transition"
+              >
+                <span className="flex items-center gap-2">
+                  <Wrench className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                  <span className="text-[11px] font-semibold">4. Vehicle Maintenance Lock: V-305 Siding Block</span>
+                </span>
+                <Play className="w-3 h-3 text-sky-400" />
+              </button>
+
+              <button
+                onClick={handleScenario5}
+                className="w-full text-left p-2 rounded-lg bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 flex items-center justify-between transition"
+              >
+                <span className="flex items-center gap-2">
+                  <AlertOctagon className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                  <span className="text-[11px] font-semibold">5. Expired Driver License: D-508 Haulage Block</span>
+                </span>
+                <Play className="w-3 h-3 text-sky-400" />
+              </button>
+
+              <button
+                onClick={handleScenario6}
+                className="w-full text-left p-2 rounded-lg bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 flex items-center justify-between transition"
+              >
+                <span className="flex items-center gap-2">
+                  <Radio className="w-3.5 h-3.5 text-red-500 animate-pulse shrink-0" />
+                  <span className="text-[11px] font-semibold">6. Environmental Anomaly: CH4 Methane 1.85% Spike</span>
+                </span>
+                <Play className="w-3 h-3 text-sky-400" />
+              </button>
+
+              <button
+                onClick={handleScenario7}
+                className="w-full text-left p-2 rounded-lg bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 flex items-center justify-between transition"
+              >
+                <span className="flex items-center gap-2">
+                  <Wrench className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span className="text-[11px] font-semibold">7. Equipment Breakdown: HT-04 Dump Truck Overheat</span>
+                </span>
+                <Play className="w-3 h-3 text-sky-400" />
+              </button>
+
+              <button
+                onClick={handleScenario8}
+                className="w-full text-left p-2 rounded-lg bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-300 flex items-center justify-between transition"
+              >
+                <span className="flex items-center gap-2">
+                  <FileCheck2 className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                  <span className="text-[11px] font-semibold">8. Overdue Statutory Compliance & Automated CAPA</span>
+                </span>
+                <Play className="w-3 h-3 text-sky-400" />
               </button>
             </div>
+          )}
 
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={toggleOfflineMode}
-                className={`p-2 rounded-lg text-left flex items-center space-x-1.5 border ${
-                  isOffline
-                    ? 'bg-red-500/20 text-red-300 border-red-500/40'
-                    : 'bg-slate-900 hover:bg-slate-850 border-slate-800 text-slate-300'
-                }`}
-              >
-                {isOffline ? <WifiOff className="w-3.5 h-3.5 text-red-400" /> : <Wifi className="w-3.5 h-3.5 text-emerald-400" />}
-                <span className="text-[11px]">{isOffline ? 'Go Online' : 'Go Offline'}</span>
-              </button>
+          {/* Tab 2: 1-Click Role Switcher */}
+          {activeScenarioTab === 'roles' && (
+            <div className="space-y-2">
+              <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wider block">
+                Instant RBAC Profile Switcher
+              </span>
+              <p className="text-[11px] text-slate-400">
+                Click any persona to instantly test sidebar scoping, permissions, and role guards:
+              </p>
+
+              <div className="grid grid-cols-2 gap-1.5 max-h-60 overflow-y-auto">
+                {SEED_USERS.map((u) => {
+                  const isCurrent = currentUser?.id === u.id;
+                  return (
+                    <button
+                      key={u.id}
+                      onClick={() => {
+                        quickSwitchUser(u);
+                        onShowToast(`Switched user to ${u.name} (${u.role})`, 'success');
+                      }}
+                      className={`p-2 rounded-lg text-left border transition ${
+                        isCurrent
+                          ? 'bg-blue-600/20 border-blue-500 text-blue-300 font-semibold'
+                          : 'bg-slate-900 hover:bg-slate-850 border-slate-800 text-slate-300'
+                      }`}
+                    >
+                      <div className="text-[11px] font-bold truncate flex items-center gap-1">
+                        <Shield className="w-3 h-3 shrink-0" />
+                        <span className="truncate">{u.name}</span>
+                      </div>
+                      <div className="text-[9px] text-slate-400 truncate">{u.role}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Tab 3: Quick Statutory DGMS Tests */}
+          {activeScenarioTab === 'quick' && (
+            <div className="space-y-2">
+              <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">
+                Statutory DGMS Rule Conflict Tests
+              </span>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={handleSimulateHindiVoice}
+                  className="p-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-lg text-left flex items-center space-x-1.5"
+                >
+                  <Mic className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span className="text-[11px]">Hindi Voice Sim</span>
+                </button>
+
+                <button
+                  onClick={handleSimulateSlaBreach}
+                  className="p-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-lg text-left flex items-center space-x-1.5"
+                >
+                  <AlertOctagon className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                  <span className="text-[11px]">SLA Breach Alert</span>
+                </button>
+              </div>
 
               <button
-                onClick={async () => {
-                  const synced = await syncOfflineQueue();
-                  onShowToast(`Synced ${synced} offline queued records to central engine!`, 'success');
+                onClick={() => {
+                  onShowToast(
+                    'Driver D-508 (Shyamal Murmu): Commercial License Expired! Dispatch Wizard will strictly reject assignment.',
+                    'error'
+                  );
+                  onNavigateTab('transportation');
                 }}
-                className="p-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-lg text-left flex items-center space-x-1.5"
+                className="w-full p-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-lg text-left"
               >
-                <Wifi className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                <span className="text-[11px]">Sync Local Queue</span>
+                <span className="text-[11px] font-semibold text-rose-400 block">Driver License Expired</span>
+                <span className="text-[9px] text-slate-400 block">D-508 (Shyamal M. - Commercial DL Expired)</span>
               </button>
-            </div>
 
-            <button
-              onClick={() => {
-                resetDemoData();
-                setActiveStep(0);
-                onShowToast('Demo data reset to fresh baseline seed state.', 'success');
-              }}
-              className="w-full mt-1 p-2 bg-rose-950/50 hover:bg-rose-900/50 border border-rose-900 text-rose-300 rounded-lg text-center font-semibold text-[11px] flex items-center justify-center space-x-1.5"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Reset Database to Baseline</span>
-            </button>
-          </div>
+              <button
+                onClick={() => {
+                  onShowToast(
+                    'Worker w9 (Ganesh Kewat): 8.0h / 8.0h Daily Limit Reached! Shift blocked under CMR 2017 & Mines Act Sec 33 without Manager Authorization.',
+                    'error'
+                  );
+                  onNavigateTab('workforce');
+                }}
+                className="w-full p-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-lg text-left"
+              >
+                <span className="text-[11px] font-semibold text-amber-400 block">Worker 8h OT Limit</span>
+                <span className="text-[9px] text-slate-400 block">w9 (Ganesh Kewat - 8h Statutory Limit Reached)</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  onShowToast(
+                    'Vehicle V-305 (MP-66-DK-9021): Workshop Maintenance Lock! Dispatch Wizard strictly blocks allocation.',
+                    'error'
+                  );
+                  onNavigateTab('transportation');
+                }}
+                className="w-full p-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-lg text-left flex items-center justify-between"
+              >
+                <div>
+                  <span className="text-[11px] font-semibold text-amber-400 block">Maintenance Vehicle Dispatch Lock</span>
+                  <span className="text-[9px] text-slate-400 block">V-305 (MP-66-DK-9021 in Workshop Maintenance)</span>
+                </div>
+                <Play className="w-3 h-3 text-amber-400" />
+              </button>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={toggleOfflineMode}
+                  className={`p-2 rounded-lg text-left flex items-center space-x-1.5 border ${
+                    isOffline
+                      ? 'bg-red-500/20 text-red-300 border-red-500/40'
+                      : 'bg-slate-900 hover:bg-slate-850 border-slate-800 text-slate-300'
+                  }`}
+                >
+                  {isOffline ? <WifiOff className="w-3.5 h-3.5 text-red-400" /> : <Wifi className="w-3.5 h-3.5 text-emerald-400" />}
+                  <span className="text-[11px]">{isOffline ? 'Go Online' : 'Go Offline'}</span>
+                </button>
+
+                <button
+                  onClick={async () => {
+                    const synced = await syncOfflineQueue();
+                    onShowToast(`Synced ${synced} offline queued records to central engine!`, 'success');
+                  }}
+                  className="p-2 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-lg text-left flex items-center space-x-1.5"
+                >
+                  <Wifi className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                  <span className="text-[11px]">Sync Local Queue</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Reset Baseline */}
+          <button
+            onClick={() => {
+              resetDemoData();
+              setActiveStep(0);
+              onShowToast('Demo data reset to fresh baseline seed state.', 'success');
+            }}
+            className="w-full mt-1 p-2 bg-rose-950/50 hover:bg-rose-900/50 border border-rose-900 text-rose-300 rounded-lg text-center font-semibold text-[11px] flex items-center justify-center space-x-1.5"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Reset Database to Baseline</span>
+          </button>
         </div>
       )}
     </div>

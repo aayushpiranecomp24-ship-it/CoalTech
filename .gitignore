@@ -15,6 +15,7 @@ dist-ssr
 .env.*
 !.env.example
 .agents
+Odoo-Hackathon--main/
 
 # Editor directories and files
 .vscode/*

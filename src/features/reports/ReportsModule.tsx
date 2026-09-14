@@ -1,4 +1,4 @@
-// MINEGOV AI - Audit Reports, OCR Processing & Export Module
+// COALTECH - Audit Reports, OCR Processing & Export Module
 import React, { useState } from 'react';
 import { useGovernance } from '../../context/GovernanceContext';
 import { useI18n } from '../../context/I18nContext';
@@ -36,19 +36,19 @@ export const ReportsModule: React.FC = () => {
   const handleExportCSV = () => {
     switch (activeReportType) {
       case 'compliance':
-        exportToCSV('MINEGOV_Compliance_Report', complianceItems);
+        exportToCSV('COALTECH_Compliance_Report', complianceItems);
         break;
       case 'safety':
-        exportToCSV('MINEGOV_Safety_Violations_Report', violations);
+        exportToCSV('COALTECH_Safety_Violations_Report', violations);
         break;
       case 'inspections':
-        exportToCSV('MINEGOV_Inspections_Report', inspections);
+        exportToCSV('COALTECH_Inspections_Report', inspections);
         break;
       case 'contractors':
-        exportToCSV('MINEGOV_Contractor_Scorecard', contractors);
+        exportToCSV('COALTECH_Contractor_Scorecard', contractors);
         break;
       default:
-        exportToCSV('MINEGOV_Data_Report', complianceItems);
+        exportToCSV('COALTECH_Data_Report', complianceItems);
     }
   };
 

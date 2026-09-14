@@ -1,22 +1,82 @@
-// MINEGOV AI - Workforce & Labour Welfare Module
 import React, { useState } from 'react';
 import { useGovernance } from '../../context/GovernanceContext';
 import { useI18n } from '../../context/I18nContext';
-import { formatDate } from '../../utils/formatters';
 import type { WorkerGrievance } from '../../types';
 import {
   HardHat,
   Search,
   MessageSquare,
+  UserPlus,
+  Clock,
+  AlertTriangle,
+  CheckCircle2,
+  Calendar,
 } from 'lucide-react';
+import { formatDate } from '../../utils/formatters';
+import { AddWorkerModal } from '../masterData/components/AddWorkerModal';
+import { OvertimeApprovalModal } from './components/OvertimeApprovalModal';
+import { ResourceAvailabilityService } from '../../services/resourceAvailabilityService';
 
 export const WorkforceModule: React.FC = () => {
-  const { workers, grievances, submitGrievance, mines } = useGovernance();
+  const { workers, grievances, submitGrievance, mines, overtimeRecords, updateWorker } = useGovernance();
   const { t } = useI18n();
 
   const [activeTab, setActiveTab] = useState<'roster' | 'grievances'>('roster');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedShift, setSelectedShift] = useState<string>('All');
+
+  // Master Data & Overtime Modals
+  const [showAddWorkerModal, setShowAddWorkerModal] = useState(false);
+  const [showOvertimeModal, setShowOvertimeModal] = useState(false);
+  const [preselectedWorkerIdForOT, setPreselectedWorkerIdForOT] = useState<string | undefined>(undefined);
+
+  // Shift & Mine Deployment Assignment Modal
+  const [assignWorker, setAssignWorker] = useState<any | null>(null);
+  const [targetMineId, setTargetMineId] = useState<string>('m1');
+  const [targetShift, setTargetShift] = useState<string>('Morning Shift (A)');
+  const [assignmentError, setAssignmentError] = useState<string | null>(null);
+  const [assignmentSuccess, setAssignmentSuccess] = useState<string | null>(null);
+
+  const openAssignShift = (w: any) => {
+    setAssignWorker(w);
+    setTargetMineId(w.mineId || 'm1');
+    setTargetShift(w.shift || 'Morning Shift (A)');
+    setAssignmentError(null);
+    setAssignmentSuccess(null);
+  };
+
+  const handleConfirmAssignment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!assignWorker) return;
+
+    const targetMine = mines.find((m) => m.id === targetMineId);
+    const check = ResourceAvailabilityService.validateWorkerAssignment(
+      assignWorker,
+      targetMineId,
+      targetShift,
+      targetMine?.name,
+      { allWorkers: workers }
+    );
+
+    if (!check.available) {
+      setAssignmentError(check.reason || 'Statutory deployment conflict detected.');
+      return;
+    }
+
+    updateWorker(assignWorker.id, {
+      mineId: targetMineId,
+      shift: targetShift,
+    });
+
+    setAssignmentError(null);
+    setAssignmentSuccess(
+      `Statutory clearance confirmed: ${assignWorker.name} assigned to ${targetMine?.name || targetMineId} (${targetShift}).`
+    );
+    setTimeout(() => {
+      setAssignWorker(null);
+      setAssignmentSuccess(null);
+    }, 1200);
+  };
 
   // Grievance Form Modal
   const [showGrievanceModal, setShowGrievanceModal] = useState(false);
@@ -29,7 +89,8 @@ export const WorkforceModule: React.FC = () => {
       w.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       w.department.toLowerCase().includes(searchQuery.toLowerCase()) ||
       w.role.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      w.badgeNumber.toLowerCase().includes(searchQuery.toLowerCase());
+      w.badgeNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (w.workerId && w.workerId.toLowerCase().includes(searchQuery.toLowerCase()));
     const matchesShift = selectedShift === 'All' || w.shift.includes(selectedShift);
     return matchesSearch && matchesShift;
   });
@@ -43,7 +104,7 @@ export const WorkforceModule: React.FC = () => {
   };
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="p-6 space-y-6 max-w-7xl mx-auto animate-fadeIn">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -54,17 +115,39 @@ export const WorkforceModule: React.FC = () => {
             </h1>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Personnel shift tracking, statutory vocational training completion, and confidential safety grievances.
+            Personnel shift tracking, statutory vocational training completion, daily 8h limits, and confidential safety grievances.
           </p>
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center flex-wrap gap-2">
+          <button
+            onClick={() => {
+              setPreselectedWorkerIdForOT(undefined);
+              setShowOvertimeModal(true);
+            }}
+            className="flex items-center space-x-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-amber-400 border border-amber-500/30 rounded-xl text-xs font-semibold shadow-sm transition"
+          >
+            <Clock className="w-4 h-4 text-amber-400" />
+            <span>Overtime Authorizations</span>
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500/20 text-amber-300 font-bold ml-1">
+              {overtimeRecords.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setShowAddWorkerModal(true)}
+            className="flex items-center space-x-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white rounded-xl text-xs font-semibold shadow-md transition"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>Enroll Mining Personnel</span>
+          </button>
+
           <button
             onClick={() => setShowGrievanceModal(true)}
-            className="flex items-center space-x-1.5 px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-semibold shadow-md transition"
+            className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold transition"
           >
-            <MessageSquare className="w-4 h-4" />
-            <span>Submit Worker Grievance</span>
+            <MessageSquare className="w-4 h-4 text-slate-500" />
+            <span>Worker Grievance</span>
           </button>
         </div>
       </div>
@@ -158,28 +241,68 @@ export const WorkforceModule: React.FC = () => {
                   <tr>
                     <th className="py-3 px-4">Badge / Worker</th>
                     <th className="py-3 px-4">Mine & Department</th>
-                    <th className="py-3 px-4">Operational Role</th>
-                    <th className="py-3 px-4">Assigned Shift</th>
+                    <th className="py-3 px-4">Role & Skill</th>
+                    <th className="py-3 px-4">Shift</th>
+                    <th className="py-3 px-4">Daily Hours (8h Max)</th>
                     <th className="py-3 px-4">Attendance</th>
-                    <th className="py-3 px-4">Vocational Safety Training</th>
-                    <th className="py-3 px-4 text-right">Safety Score</th>
+                    <th className="py-3 px-4">Vocational Training</th>
+                    <th className="py-3 px-4 text-center">Statutory Clearance</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {filteredWorkers.map((w) => {
                     const mine = mines.find((m) => m.id === w.mineId);
+                    const hoursWorked = w.dailyHoursWorked || 0;
+                    const isOverLimit = hoursWorked >= 8;
+
                     return (
                       <tr key={w.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-850/50 transition">
                         <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-slate-100">
                           <div>{w.name}</div>
-                          <div className="font-mono text-[10px] text-slate-400">{w.badgeNumber}</div>
+                          <div className="font-mono text-[10px] text-slate-400 flex items-center space-x-1">
+                            <span>{w.workerId || w.badgeNumber}</span>
+                            {w.status && (
+                              <span className={`px-1 rounded text-[8px] font-bold ${
+                                w.status === 'Active' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300'
+                              }`}>
+                                {w.status}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="py-3.5 px-4">
-                          <div className="text-slate-800 dark:text-slate-200">{mine?.name || w.mineId}</div>
+                          <div className="text-slate-800 dark:text-slate-200 font-medium">{mine?.name || w.mineId}</div>
                           <div className="text-[10px] text-slate-400">{w.department}</div>
                         </td>
-                        <td className="py-3.5 px-4 text-slate-700 dark:text-slate-300">{w.role}</td>
-                        <td className="py-3.5 px-4 text-slate-600 dark:text-slate-400">{w.shift}</td>
+                        <td className="py-3.5 px-4">
+                          <div className="text-slate-700 dark:text-slate-300 font-medium">{w.role}</div>
+                          {w.skill && (
+                            <span className="text-[9px] font-semibold text-sky-600 dark:text-sky-400">
+                              {w.skill}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-600 dark:text-slate-400 text-[11px]">{w.shift}</td>
+                        <td className="py-3.5 px-4">
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between text-[10px]">
+                              <span className={`font-bold ${isOverLimit ? 'text-rose-600 dark:text-rose-400' : 'text-slate-700 dark:text-slate-300'}`}>
+                                {hoursWorked}h / 8.0h
+                              </span>
+                              {isOverLimit && (
+                                <span className="text-[9px] font-bold text-rose-500 uppercase">Limit Reached</span>
+                              )}
+                            </div>
+                            <div className="w-24 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${
+                                  isOverLimit ? 'bg-rose-500' : hoursWorked > 6 ? 'bg-amber-500' : 'bg-emerald-500'
+                                }`}
+                                style={{ width: `${Math.min(100, (hoursWorked / 8) * 100)}%` }}
+                              />
+                            </div>
+                          </div>
+                        </td>
                         <td className="py-3.5 px-4">
                           <span
                             className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
@@ -204,8 +327,38 @@ export const WorkforceModule: React.FC = () => {
                             {w.trainingStatus}
                           </span>
                         </td>
-                        <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-800 dark:text-slate-200">
-                          {w.safetyScore}/100
+                        <td className="py-3.5 px-4 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => openAssignShift(w)}
+                              className="px-2.5 py-1 bg-sky-500/10 hover:bg-sky-500/20 text-sky-600 dark:text-sky-400 border border-sky-500/30 rounded-lg text-[10px] font-bold shadow-xs transition flex items-center gap-1"
+                              title="Assign Shift / Mine Deployment"
+                            >
+                              <Calendar className="w-3 h-3" />
+                              <span>Deploy / Shift</span>
+                            </button>
+                            {isOverLimit ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPreselectedWorkerIdForOT(w.id);
+                                  setShowOvertimeModal(true);
+                                }}
+                                className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-[10px] font-bold shadow-sm transition"
+                              >
+                                Authorize OT
+                              </button>
+                            ) : w.trainingStatus === 'Expired' ? (
+                              <span className="text-[10px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded border border-rose-300">
+                                Locked
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                                Cleared
+                              </span>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -325,6 +478,157 @@ export const WorkforceModule: React.FC = () => {
                   className="w-2/3 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-semibold shadow-md transition"
                 >
                   File Grievance
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Worker Master Data Modal */}
+      <AddWorkerModal
+        isOpen={showAddWorkerModal}
+        onClose={() => setShowAddWorkerModal(false)}
+      />
+
+      {/* Statutory Overtime Approval Modal */}
+      <OvertimeApprovalModal
+        isOpen={showOvertimeModal}
+        onClose={() => setShowOvertimeModal(false)}
+        preselectedWorkerId={preselectedWorkerIdForOT}
+      />
+
+      {/* Shift Deployment & Conflict Validation Modal */}
+      {assignWorker && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <div className="flex items-center space-x-2">
+                <Clock className="w-5 h-5 text-sky-600 dark:text-sky-400" />
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  Statutory Shift Deployment & Mine Allocation
+                </h3>
+              </div>
+              <button
+                onClick={() => {
+                  setAssignWorker(null);
+                  setAssignmentError(null);
+                  setAssignmentSuccess(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Worker summary badge */}
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/60 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-bold text-slate-900 dark:text-white">{assignWorker.name}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {assignWorker.role} • Badge: <span className="font-mono text-sky-600 dark:text-sky-400">{assignWorker.badgeNumber}</span>
+                </p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Current: <span className="font-medium text-slate-700 dark:text-slate-300">{assignWorker.shift}</span> at <span className="font-medium text-slate-700 dark:text-slate-300">{assignWorker.assignedMineName || assignWorker.mineId}</span>
+                </p>
+              </div>
+              <div className="text-right">
+                <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold ${
+                  (assignWorker.dailyHoursWorked || 0) >= 8
+                    ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-400'
+                    : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400'
+                }`}>
+                  Daily: {assignWorker.dailyHoursWorked || 0}h / 8h
+                </span>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                  Training: <span className={assignWorker.trainingStatus === 'Valid' ? 'text-emerald-500 font-semibold' : 'text-rose-500 font-semibold'}>{assignWorker.trainingStatus}</span>
+                </p>
+              </div>
+            </div>
+
+            {/* Statutory Error/Success Notice */}
+            {assignmentError && (
+              <div className="p-3 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900/60 rounded-xl flex items-start space-x-2 text-xs text-rose-700 dark:text-rose-300 animate-fadeIn">
+                <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold">Statutory Deployment Blocked</p>
+                  <p className="mt-0.5">{assignmentError}</p>
+                </div>
+              </div>
+            )}
+
+            {assignmentSuccess && (
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-900/60 rounded-xl flex items-start space-x-2 text-xs text-emerald-700 dark:text-emerald-300 animate-fadeIn">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold">Clearance Approved</p>
+                  <p className="mt-0.5">{assignmentSuccess}</p>
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleConfirmAssignment} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Target Mine Facility
+                </label>
+                <select
+                  value={targetMineId}
+                  onChange={(e) => {
+                    setTargetMineId(e.target.value);
+                    setAssignmentError(null);
+                  }}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white text-xs outline-none focus:border-sky-500"
+                >
+                  {mines.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} ({m.type || 'Opencast'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Target Operating Shift
+                </label>
+                <select
+                  value={targetShift}
+                  onChange={(e) => {
+                    setTargetShift(e.target.value);
+                    setAssignmentError(null);
+                  }}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white text-xs outline-none focus:border-sky-500"
+                >
+                  <option value="Morning Shift (A)">Morning Shift (A) — 08:00 to 16:00</option>
+                  <option value="Afternoon Shift (B)">Afternoon Shift (B) — 16:00 to 00:00</option>
+                  <option value="Night Shift (C)">Night Shift (C) — 00:00 to 08:00</option>
+                  <option value="General Shift (G)">General Shift (G) — 09:00 to 17:00</option>
+                </select>
+              </div>
+
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 bg-slate-100/70 dark:bg-slate-800/40 p-2.5 rounded-lg">
+                <span className="font-semibold text-slate-700 dark:text-slate-300">Statutory Rules (DGMS / CMR 2017):</span> Maximum 8.0 hours per worker per day. Overlapping cross-mine deployments are strictly rejected unless certified by Safety Officer.
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAssignWorker(null);
+                    setAssignmentError(null);
+                    setAssignmentSuccess(null);
+                  }}
+                  className="w-1/3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="w-2/3 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl font-semibold shadow-md transition text-xs flex items-center justify-center space-x-1"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Verify & Deploy Worker</span>
                 </button>
               </div>
             </form>

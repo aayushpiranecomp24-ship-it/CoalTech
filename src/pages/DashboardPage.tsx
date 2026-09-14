@@ -1,4 +1,4 @@
-// MINEGOV AI - Dynamic Role-Aware Executive & Operational Command Center
+// COALTECH - Dynamic Role-Aware Executive & Operational Command Center
 import React from 'react';
 import { useGovernance } from '../context/GovernanceContext';
 import { useI18n } from '../context/I18nContext';
@@ -35,7 +35,14 @@ import {
   Plus,
   Send,
   Download,
+  Truck,
+  Scale,
+  Navigation,
+  Wrench,
 } from 'lucide-react';
+import { Reveal } from '../components/animations/Reveal';
+import { Magnetic } from '../components/animations/Magnetic';
+import { StatusChip } from '../components/ui/Badge';
 
 interface DashboardPageProps {
   onNavigateTab: (tab: string) => void;
@@ -52,6 +59,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigateTab }) =
     workers,
     grievances,
     inspections,
+    coalMovements = [],
+    fleetVehicles = [],
+    fleetDrivers = [],
+    routes = [],
   } = useGovernance();
   const { t } = useI18n();
 
@@ -89,6 +100,70 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigateTab }) =
     { name: t('status_open', 'Open / In Remediation'), value: activeViolations.length, color: '#ef4444' },
     { name: t('status_under_verification', 'Pending Verification'), value: violations.filter((v) => v.status === 'ACTION_SUBMITTED').length, color: '#f59e0b' },
   ];
+
+  // Transportation Aggregates & Datasets for Transportation Head Dashboard
+  const activeMovements = coalMovements.filter(
+    (m) => m.status === 'IN_TRANSIT' || m.status === 'DISPATCHED' || m.status === 'LOADING'
+  );
+  const inTransitCount = coalMovements.filter((m) => m.status === 'IN_TRANSIT').length;
+  const loadingCount = coalMovements.filter((m) => m.status === 'LOADING').length;
+  const dispatchedTonnesTotal = coalMovements.reduce((sum, m) => sum + (m.dispatchedNetTonnes || 0), 0);
+  const reconciledMovements = coalMovements.filter((m) => m.status === 'RECONCILED');
+  const reconciledTonnesTotal = reconciledMovements.reduce((sum, m) => sum + (m.receivedNetTonnes || 0), 0);
+  const activeFleetCount = fleetVehicles.filter((v) => v.status === 'on_trip' || v.status === 'active').length;
+  const idleFleetCount = fleetVehicles.filter((v) => v.status === 'idle').length;
+  const maintenanceFleetCount = fleetVehicles.filter((v) => v.status === 'maintenance' || v.status === 'breakdown').length;
+  const onDutyDriversCount = fleetDrivers.filter((d) => d.status === 'on_duty' || d.status === 'on_trip').length;
+  const discrepancyMovements = coalMovements.filter((m) => m.status === 'DISCREPANCY_FLAGGED');
+  const activeRoutes = routes.filter((r) => r.status === 'ACTIVE');
+  const sealIntactRate = coalMovements.length > 0
+    ? Math.round((coalMovements.filter((m) => m.sealIntact !== false).length / coalMovements.length) * 100)
+    : 100;
+
+  // 6 Analytical Datasets for Transportation Charts
+  const movementThroughputData = coalMovements.slice(0, 8).map((m) => ({
+    name: m.id.replace('CM-2026-', '#'),
+    Dispatched: m.dispatchedNetTonnes,
+    Received: m.receivedNetTonnes || m.dispatchedNetTonnes,
+    vehicle: m.vehiclePlate,
+  }));
+
+  const fleetStatusPieData = [
+    { name: 'Active / On Trip', value: activeFleetCount, color: '#10b981' },
+    { name: 'Idle / Staged', value: idleFleetCount, color: '#38bdf8' },
+    { name: 'Maintenance', value: fleetVehicles.filter((v) => v.status === 'maintenance').length, color: '#f59e0b' },
+    { name: 'Breakdown', value: fleetVehicles.filter((v) => v.status === 'breakdown').length, color: '#ef4444' },
+  ].filter((d) => d.value > 0);
+
+  const corridorPerformanceData = routes.map((r) => ({
+    name: r.id,
+    routeCode: r.routeCode,
+    dailyTonnes: r.dailyTonnes,
+    distanceKm: r.distanceKm,
+    durationMins: r.avgDurationMins,
+    risk: r.riskLevel,
+  }));
+
+  const weighbridgeDiscrepancyData = (discrepancyMovements.length > 0 ? discrepancyMovements : coalMovements.slice(0, 3)).map((m) => ({
+    name: m.id.replace('CM-2026-', '#'),
+    shortageMT: m.weightDiscrepancyTonnes || 0.1,
+    variancePct: m.weightDiscrepancyPercent || 0.3,
+  }));
+
+  const corridorRiskData = routes.map((r) => ({
+    name: r.id,
+    riskScore: r.riskLevel === 'HIGH' ? 82 : r.riskLevel === 'MEDIUM' ? 54 : 22,
+    activeVehicles: r.activeVehiclesCount || r.activeVehicles || 0,
+  }));
+
+  const contractorFleetData = contractors.slice(0, 5).map((c) => {
+    const assignedVehicles = fleetVehicles.filter((v) => v.transporterName === c.name).length;
+    return {
+      name: c.name.split(' ')[0],
+      vehicles: assignedVehicles || (c.equipmentCount ? Math.min(c.equipmentCount, 12) : 4),
+      complianceScore: 100 - c.riskScore,
+    };
+  });
 
   // Dynamic Dashboard Banners per Role
   const getRoleHeaderInfo = () => {
@@ -159,10 +234,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigateTab }) =
           subtitle: t('dash_sub_dgms', 'External statutory audit oversight, non-compliance notice tracking, and blockchain ledger validation.'),
           scopeChip: t('scope_regulatory', 'Regulatory Oversight Scope • DGMS Statutory Surveillance'),
         };
+      case 'Transportation Head':
+        return {
+          title: t('dash_banner_th', 'Coal Logistics & Siding Transportation Command Hub'),
+          subtitle: t('dash_sub_th', 'Fleet dispatch telemetry, weighbridge gross/tare reconciliation, seal integrity, and GPS route corridor tracking.'),
+          scopeChip: t('scope_transportation', 'Transportation Scope • Logistics & Siding Command'),
+        };
       default:
         return {
-          title: 'MINEGOV AI Command Center',
-          subtitle: 'Operational compliance monitoring system for coal mines.',
+          title: 'CoalTech Command Center',
+          subtitle: 'Operational compliance and transportation monitoring system for coal mines.',
           scopeChip: 'Standard Scope',
         };
     }
@@ -878,6 +959,107 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigateTab }) =
           </>
         );
 
+      case 'Transportation Head':
+        return (
+          <>
+            <StatCard
+              title={t('kpi_active_trips', 'Active Haulage Dispatches')}
+              value={`${activeMovements.length} Active`}
+              subtitle={`${inTransitCount} In Transit, ${loadingCount} Loading`}
+              icon={Truck}
+              trend="+3 vs yesterday"
+              trendType="up"
+              riskLevel="LOW"
+              onClick={() => onNavigateTab('transportation-movements')}
+            />
+            <StatCard
+              title={t('kpi_coal_haulage_today', 'Coal Dispatched Today')}
+              value={`${dispatchedTonnesTotal.toFixed(1)} MT`}
+              subtitle="5 Coal Sectors Active"
+              icon={Activity}
+              trend="+14.2% on schedule"
+              trendType="up"
+              riskLevel="LOW"
+              onClick={() => onNavigateTab('transportation-dispatch')}
+            />
+            <StatCard
+              title={t('kpi_weighbridge_reconciliation', 'Reconciled Siding Receipts')}
+              value={`${reconciledTonnesTotal.toFixed(1)} MT`}
+              subtitle="Gross-Tare Verified"
+              icon={CheckCircle2}
+              trend={`${reconciledMovements.length} trips verified`}
+              riskLevel="LOW"
+              onClick={() => onNavigateTab('transportation-reconciliation')}
+            />
+            <StatCard
+              title={t('kpi_active_fleet', 'Haulage Fleet Available')}
+              value={`${activeFleetCount} / ${fleetVehicles.length}`}
+              subtitle={`${idleFleetCount} in ready depot standby`}
+              icon={Building2}
+              trend="Fleet Availability 83%"
+              riskLevel="LOW"
+              onClick={() => onNavigateTab('transportation-vehicles')}
+            />
+            <StatCard
+              title="Fleet In Maintenance"
+              value={`${maintenanceFleetCount} Units`}
+              subtitle="Workshop Scheduled / In-Progress"
+              icon={Wrench}
+              trend={maintenanceFleetCount > 2 ? 'Action required' : 'Optimal'}
+              trendType={maintenanceFleetCount > 2 ? 'down' : 'up'}
+              riskLevel={maintenanceFleetCount > 2 ? 'HIGH' : 'LOW'}
+              onClick={() => onNavigateTab('transportation-maintenance')}
+            />
+            <StatCard
+              title="Certified Drivers On Duty"
+              value={`${onDutyDriversCount} / ${fleetDrivers.length}`}
+              subtitle="DGMS Safety Endorsed"
+              icon={Users2}
+              trend="Zero statutory violations"
+              riskLevel="LOW"
+              onClick={() => onNavigateTab('transportation-drivers')}
+            />
+            <StatCard
+              title="Flagged Discrepancies"
+              value={`${discrepancyMovements.length} Flagged`}
+              subtitle="Exceeds 0.5% weight tolerance"
+              icon={AlertTriangle}
+              trend={discrepancyMovements.length > 0 ? 'Investigation active' : 'All reconciled'}
+              trendType={discrepancyMovements.length > 0 ? 'alert' : 'up'}
+              riskLevel={discrepancyMovements.length > 0 ? 'HIGH' : 'LOW'}
+              onClick={() => onNavigateTab('transportation-reconciliation')}
+            />
+            <StatCard
+              title={t('kpi_corridor_compliance', 'Geo-Corridors Active')}
+              value={`${activeRoutes.length} / ${routes.length}`}
+              subtitle="RFID Geofenced Corridors"
+              icon={Navigation}
+              trend="Live Camera & Sensor Feeds"
+              riskLevel="LOW"
+              onClick={() => onNavigateTab('transportation-routes')}
+            />
+            <StatCard
+              title={t('kpi_seal_integrity', 'E-Lock Seal Integrity')}
+              value={`${sealIntactRate}%`}
+              subtitle="Cryptographic RFID Seals"
+              icon={ShieldCheck}
+              trend={sealIntactRate < 95 ? 'Tamper seal alert' : '100% Intact'}
+              trendType={sealIntactRate < 95 ? 'down' : 'up'}
+              riskLevel={sealIntactRate < 95 ? 'HIGH' : 'LOW'}
+              onClick={() => onNavigateTab('transportation-reconciliation')}
+            />
+            <StatCard
+              title="Weighbridge Accuracy"
+              value="99.4%"
+              subtitle="Dynamic Siding & Static Scales"
+              icon={Scale}
+              trend="DGMS Metrology Calibrated"
+              riskLevel="LOW"
+              onClick={() => onNavigateTab('transportation-reconciliation')}
+            />
+          </>
+        );
+
       default:
         return null;
     }
@@ -886,19 +1068,50 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigateTab }) =
   // Role-Specific Quick Action Bar
   const renderQuickActions = () => {
     switch (role) {
+      case 'Transportation Head':
+        return (
+          <div className="flex flex-wrap items-center gap-2">
+            <Magnetic>
+              <button
+                onClick={() => onNavigateTab('transportation-dispatch')}
+                className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-blue-500/20 active:scale-[0.98] transition-all flex items-center space-x-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>{t('btn_new_dispatch', 'Create Coal Dispatch')}</span>
+              </button>
+            </Magnetic>
+            <button
+              onClick={() => onNavigateTab('transportation-movements')}
+              className="px-3.5 py-2 bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] text-[var(--color-text)] border border-[var(--color-border)] rounded-xl text-xs font-medium active:scale-[0.98] transition-all flex items-center space-x-1.5"
+            >
+              <Truck className="w-3.5 h-3.5 text-blue-400" />
+              <span>{t('tab_active_movements', 'Active Movements')}</span>
+            </button>
+            <button
+              onClick={() => onNavigateTab('transportation-reconciliation')}
+              className="px-3.5 py-2 bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] text-[var(--color-text)] border border-[var(--color-border)] rounded-xl text-xs font-medium active:scale-[0.98] transition-all flex items-center space-x-1.5"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span>{t('tab_reconciliation', 'Weighbridge Reconciliation')}</span>
+            </button>
+          </div>
+        );
+
       case 'Safety Officer':
         return (
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => onNavigateTab('incidents')}
-              className="px-3.5 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold shadow-md transition flex items-center space-x-1.5"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>{t('btn_report_hazard', 'Report Hazard / Violation')}</span>
-            </button>
+            <Magnetic>
+              <button
+                onClick={() => onNavigateTab('incidents')}
+                className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-rose-500/20 active:scale-[0.98] transition-all flex items-center space-x-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>{t('btn_report_hazard', 'Report Hazard / Violation')}</span>
+              </button>
+            </Magnetic>
             <button
               onClick={() => onNavigateTab('inspections')}
-              className="px-3.5 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold shadow-md transition flex items-center space-x-1.5"
+              className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-blue-500/20 active:scale-[0.98] transition-all flex items-center space-x-1.5"
             >
               <Eye className="w-3.5 h-3.5" />
               <span>{t('btn_new_inspection', 'Log Field Inspection')}</span>
@@ -909,18 +1122,20 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigateTab }) =
       case 'Mine Head':
         return (
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => onNavigateTab('corrective')}
-              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-md transition flex items-center space-x-1.5"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>{t('btn_verify_approve', 'Review Corrective Actions')}</span>
-            </button>
+            <Magnetic>
+              <button
+                onClick={() => onNavigateTab('corrective')}
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-emerald-500/20 active:scale-[0.98] transition-all flex items-center space-x-1.5"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>{t('btn_verify_approve', 'Review Corrective Actions')}</span>
+              </button>
+            </Magnetic>
             <button
               onClick={() => onNavigateTab('gis-map')}
-              className="px-3.5 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold shadow-md transition flex items-center space-x-1.5"
+              className="px-3.5 py-2 bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] text-[var(--color-text)] border border-[var(--color-border)] rounded-xl text-xs font-medium active:scale-[0.98] transition-all flex items-center space-x-1.5"
             >
-              <Building2 className="w-3.5 h-3.5" />
+              <Building2 className="w-3.5 h-3.5 text-blue-400" />
               <span>{t('nav_gis', 'GIS Risk Map')}</span>
             </button>
           </div>
@@ -929,18 +1144,20 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigateTab }) =
       case 'Worker':
         return (
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => onNavigateTab('incidents')}
-              className="px-3.5 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold shadow-md transition flex items-center space-x-1.5"
-            >
-              <AlertTriangle className="w-3.5 h-3.5" />
-              <span>{t('mob_report_unsafe', 'Report Unsafe Condition')}</span>
-            </button>
+            <Magnetic>
+              <button
+                onClick={() => onNavigateTab('incidents')}
+                className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-rose-500/20 active:scale-[0.98] transition-all flex items-center space-x-1.5"
+              >
+                <AlertTriangle className="w-3.5 h-3.5" />
+                <span>{t('mob_report_unsafe', 'Report Unsafe Condition')}</span>
+              </button>
+            </Magnetic>
             <button
               onClick={() => onNavigateTab('workforce')}
-              className="px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold shadow-md transition flex items-center space-x-1.5"
+              className="px-3.5 py-2 bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] text-[var(--color-text)] border border-[var(--color-border)] rounded-xl text-xs font-medium active:scale-[0.98] transition-all flex items-center space-x-1.5"
             >
-              <Send className="w-3.5 h-3.5" />
+              <Send className="w-3.5 h-3.5 text-amber-400" />
               <span>{t('btn_submit_grievance', 'Submit Anonymous Grievance')}</span>
             </button>
           </div>
@@ -949,18 +1166,20 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigateTab }) =
       case 'Finance Officer':
         return (
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => onNavigateTab('finance')}
-              className="px-3.5 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold shadow-md transition flex items-center space-x-1.5"
-            >
-              <Coins className="w-3.5 h-3.5" />
-              <span>{t('kpi_compliance_payment_holds', 'Review Payment Holds')}</span>
-            </button>
+            <Magnetic>
+              <button
+                onClick={() => onNavigateTab('finance')}
+                className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-blue-500/20 active:scale-[0.98] transition-all flex items-center space-x-1.5"
+              >
+                <Coins className="w-3.5 h-3.5" />
+                <span>{t('kpi_compliance_payment_holds', 'Review Payment Holds')}</span>
+              </button>
+            </Magnetic>
             <button
               onClick={() => onNavigateTab('reports')}
-              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 border border-slate-700"
+              className="px-3.5 py-2 bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] text-[var(--color-text)] border border-[var(--color-border)] rounded-xl text-xs font-medium active:scale-[0.98] transition-all flex items-center space-x-1.5"
             >
-              <Download className="w-3.5 h-3.5" />
+              <Download className="w-3.5 h-3.5 text-slate-400" />
               <span>{t('btn_export_csv', 'Export CSV Dataset')}</span>
             </button>
           </div>
@@ -969,18 +1188,20 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigateTab }) =
       case 'Regulatory Authority':
         return (
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => onNavigateTab('audit-trail')}
-              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-md transition flex items-center space-x-1.5"
-            >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>{t('btn_verify_ledger', 'Verify Blockchain Integrity')}</span>
-            </button>
+            <Magnetic>
+              <button
+                onClick={() => onNavigateTab('audit-trail')}
+                className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-blue-500/20 active:scale-[0.98] transition-all flex items-center space-x-1.5"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>{t('btn_verify_ledger', 'Verify Blockchain Integrity')}</span>
+              </button>
+            </Magnetic>
             <button
               onClick={() => onNavigateTab('reports')}
-              className="px-3.5 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold shadow-md transition flex items-center space-x-1.5"
+              className="px-3.5 py-2 bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] text-[var(--color-text)] border border-[var(--color-border)] rounded-xl text-xs font-medium active:scale-[0.98] transition-all flex items-center space-x-1.5"
             >
-              <FileText className="w-3.5 h-3.5" />
+              <FileText className="w-3.5 h-3.5 text-slate-400" />
               <span>{t('btn_print_report', 'Print Official Report')}</span>
             </button>
           </div>
@@ -988,192 +1209,488 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigateTab }) =
 
       default:
         return (
-          <button
-            onClick={() => onNavigateTab('risk-intelligence')}
-            className="px-3.5 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold shadow-md transition flex items-center space-x-1.5"
-          >
-            <span>{t('nav_ai', 'AI Risk Intelligence')}</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
+          <Magnetic>
+            <button
+              onClick={() => onNavigateTab('risk-intelligence')}
+              className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-blue-500/20 active:scale-[0.98] transition-all flex items-center space-x-1.5"
+            >
+              <span>{t('nav_ai', 'AI Risk Intelligence')}</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </Magnetic>
         );
     }
   };
 
-  return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto font-sans">
-      {/* Scope Header Greeting Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
-        <div>
-          <div className="flex items-center space-x-2">
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold text-sky-600 dark:text-sky-400 bg-sky-500/10 border border-sky-400/20 uppercase tracking-widest">
-              {headerInfo.scopeChip}
-            </span>
-            <span className="text-xs text-slate-400 font-medium">| {currentUser?.name}</span>
-          </div>
-          <h1 className="text-xl font-black text-slate-900 dark:text-white mt-1">
-            {headerInfo.title}
-          </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            {headerInfo.subtitle}
-          </p>
-        </div>
+  const chartTooltipStyle = {
+    backgroundColor: 'var(--color-surface)',
+    borderColor: 'var(--color-border-strong)',
+    borderRadius: '0.875rem',
+    color: 'var(--color-text)',
+    fontSize: '11px',
+    boxShadow: '0 12px 30px -4px rgba(0, 0, 0, 0.45)',
+  };
 
-        {/* Dynamic Action Buttons */}
-        <div className="shrink-0">{renderQuickActions()}</div>
-      </div>
-
-      {/* Role-Specific Metric Cards Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
-        {renderRoleCards()}
-      </div>
-
-      {/* Analytical Charts & Tactical Panels */}
+  const renderTransportationAnalytics = () => (
+    <div className="space-y-6">
+      {/* Top Chart Row: Real-time Dispatch vs Receipt Throughput (col-span-2) + Fleet Availability Breakdown (col-span-1) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Chart 1: 6-Month Risk & Compliance Trends */}
-        <div className="lg:col-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+        {/* Chart 1: Movement Dispatched vs Received Net Tonnes (MT) */}
+        <div className="lg:col-span-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-card hover:border-[var(--color-border-strong)] transition-all duration-300 space-y-4">
+          <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
             <div>
-              <h3 className="font-bold text-slate-900 dark:text-white text-sm">
-                {t('chart_risk_trend', 'Risk Score Evolution (Last 6 Months)')}
+              <h3 className="font-bold text-[var(--color-text)] text-sm tracking-tight">
+                Movement Coal Throughput: Dispatched vs Received Net Tonnes
               </h3>
-              <p className="text-[10px] text-slate-400">
-                {t('chart_compliance_trend', 'Statutory Compliance Index Across Sectors')}
+              <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
+                Electronic weighbridge tare-gross verified payloads (MT)
               </p>
             </div>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-sky-500/10 text-sky-500 border border-sky-400/20">
-              CMR 2017 KPI
+            <span className="text-[10px] font-mono px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium">
+              Live Telemetry
             </span>
           </div>
-
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={riskTrendData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.3} />
-                <XAxis dataKey="month" stroke="#64748b" fontSize={11} />
-                <YAxis stroke="#64748b" fontSize={11} domain={[0, 100]} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#0f172a',
-                    borderColor: '#334155',
-                    borderRadius: '0.75rem',
-                    color: '#fff',
-                    fontSize: '11px',
-                  }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="enterpriseRisk"
-                  name={t('field_risk_score', 'AI Risk Score')}
-                  stroke="#ef4444"
-                  strokeWidth={2.5}
-                  dot={{ r: 3 }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="complianceIndex"
-                  name={t('kpi_compliance_score', 'Compliance Score')}
-                  stroke="#10b981"
-                  strokeWidth={2.5}
-                  dot={{ r: 3 }}
-                />
-              </LineChart>
+              <BarChart data={movementThroughputData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.6} />
+                <XAxis dataKey="name" stroke="var(--color-text-subtle)" fontSize={11} />
+                <YAxis stroke="var(--color-text-subtle)" fontSize={11} unit=" MT" />
+                <Tooltip contentStyle={chartTooltipStyle} />
+                <Bar dataKey="Dispatched" fill="#3b82f6" radius={[6, 6, 0, 0]} name="Dispatched (MT)" />
+                <Bar dataKey="Received" fill="#10b981" radius={[6, 6, 0, 0]} name="Received (MT)" />
+              </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        {/* Chart 2: Pipeline Distribution / Open vs Closed */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4 flex flex-col justify-between">
+        {/* Chart 2: Fleet Status Breakdown */}
+        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-card hover:border-[var(--color-border-strong)] transition-all duration-300 space-y-4 flex flex-col justify-between">
           <div>
-            <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="font-bold text-slate-900 dark:text-white text-sm">
-                {t('chart_open_vs_closed', 'Corrective Action Remediation Pipeline')}
+            <div className="border-b border-[var(--color-border)] pb-3">
+              <h3 className="font-bold text-[var(--color-text)] text-sm tracking-tight">
+                Haulage Fleet Operational State
               </h3>
-              <p className="text-[10px] text-slate-400">
-                Closed vs In-Remediation vs Under-Verification
+              <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
+                Active ({fleetVehicles.length} total vehicles across 5 sectors)
               </p>
             </div>
-
             <div className="h-44 w-full mt-2">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={openVsClosedData}
+                    data={fleetStatusPieData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={45}
-                    outerRadius={65}
+                    innerRadius={46}
+                    outerRadius={66}
                     paddingAngle={4}
                     dataKey="value"
                   >
-                    {openVsClosedData.map((entry, index) => (
+                    {fleetStatusPieData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#0f172a',
-                      borderColor: '#334155',
-                      borderRadius: '0.75rem',
-                      color: '#fff',
-                      fontSize: '11px',
-                    }}
-                  />
+                  <Tooltip contentStyle={chartTooltipStyle} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
           </div>
-
-          {/* Legend */}
-          <div className="space-y-1.5 text-xs pt-2 border-t border-slate-100 dark:border-slate-800">
-            {openVsClosedData.map((item, idx) => (
+          <div className="space-y-1.5 text-xs pt-2 border-t border-[var(--color-border)]">
+            {fleetStatusPieData.map((item, idx) => (
               <div key={idx} className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }}></span>
-                  <span className="text-slate-600 dark:text-slate-400">{item.name}</span>
+                  <span className="text-[var(--color-text-muted)]">{item.name}</span>
                 </div>
-                <span className="font-bold text-slate-900 dark:text-white font-mono">{item.value}</span>
+                <span className="font-semibold text-[var(--color-text)] font-mono">{item.value} Units</span>
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      {/* Sector Comparison Bar Chart (for Multi-mine Roles) */}
-      {(role === 'Coal Mine Manager' || role === 'Area Manager' || role === 'Regulatory Authority') && (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+      {/* Middle Chart Row: Corridor Haulage Performance (col-span-2) + Weighbridge Discrepancy Monitoring (col-span-1) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Chart 3: Corridor Haulage Volume & Daily Throughput */}
+        <div className="lg:col-span-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-card hover:border-[var(--color-border-strong)] transition-all duration-300 space-y-4">
+          <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
             <div>
-              <h3 className="font-bold text-slate-900 dark:text-white text-sm">
-                {t('chart_mine_risk_comparison', 'Mine-wise Risk Score Comparison')}
+              <h3 className="font-bold text-[var(--color-text)] text-sm tracking-tight">
+                Corridor Haulage Volume & Daily Capacity (COR-01 to COR-08)
               </h3>
-              <p className="text-[10px] text-slate-400">
-                Comparative analysis of risk scores vs statutory compliance indices
+              <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
+                Daily scheduled coal transit volume (Tonnes/day) per corridor
               </p>
             </div>
+            <span className="text-[10px] font-mono px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium">
+              8 Siding Corridors
+            </span>
           </div>
-
-          <div className="h-52 w-full">
+          <div className="h-56 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={mineComparisonData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.3} />
-                <XAxis dataKey="name" stroke="#64748b" fontSize={10} />
-                <YAxis stroke="#64748b" fontSize={10} domain={[0, 100]} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#0f172a',
-                    borderColor: '#334155',
-                    borderRadius: '0.75rem',
-                    color: '#fff',
-                    fontSize: '11px',
-                  }}
-                />
-                <Bar dataKey="riskScore" name={t('field_risk_score', 'AI Risk Score')} fill="#f43f5e" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="complianceScore" name={t('kpi_compliance_score', 'Compliance Score')} fill="#0ea5e9" radius={[4, 4, 0, 0]} />
+              <BarChart data={corridorPerformanceData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.6} />
+                <XAxis dataKey="name" stroke="var(--color-text-subtle)" fontSize={10} />
+                <YAxis stroke="var(--color-text-subtle)" fontSize={10} unit=" T" />
+                <Tooltip contentStyle={chartTooltipStyle} />
+                <Bar dataKey="dailyTonnes" fill="#3b82f6" radius={[6, 6, 0, 0]} name="Daily Tonnes" />
+                <Bar dataKey="distanceKm" fill="#8b5cf6" radius={[6, 6, 0, 0]} name="Distance (Km)" />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
-      )}
+
+        {/* Chart 4: Weighbridge Shortage & Discrepancy Monitoring */}
+        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-card hover:border-[var(--color-border-strong)] transition-all duration-300 space-y-4">
+          <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
+            <div>
+              <h3 className="font-bold text-[var(--color-text)] text-sm tracking-tight">
+                Weighbridge Variance & Shortage
+              </h3>
+              <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
+                Unreconciled weight losses exceeding 0.5% tolerance
+              </p>
+            </div>
+            <span className="text-[10px] font-mono px-2.5 py-1 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20 font-medium">
+              Pilferage Alert
+            </span>
+          </div>
+          <div className="h-56 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={weighbridgeDiscrepancyData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.6} />
+                <XAxis dataKey="name" stroke="var(--color-text-subtle)" fontSize={10} />
+                <YAxis stroke="var(--color-text-subtle)" fontSize={10} unit=" MT" />
+                <Tooltip contentStyle={chartTooltipStyle} />
+                <Bar dataKey="shortageMT" fill="#ef4444" radius={[6, 6, 0, 0]} name="Shortage (MT)" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom Chart Row: Transporter Contractor Fleet (col-span-2) + Corridor Risk Index (col-span-1) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Chart 5: Transporter Contractor Efficiency & Fleet Deployment */}
+        <div className="lg:col-span-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-card hover:border-[var(--color-border-strong)] transition-all duration-300 space-y-4">
+          <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
+            <div>
+              <h3 className="font-bold text-[var(--color-text)] text-sm tracking-tight">
+                Transporter Contractor Efficiency & Fleet Quota
+              </h3>
+              <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
+                Active vehicles and statutory safety compliance ratings per contractor
+              </p>
+            </div>
+            <span className="text-[10px] font-mono px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+              Contractor Scorecard
+            </span>
+          </div>
+          <div className="h-56 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={contractorFleetData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.6} />
+                <XAxis dataKey="name" stroke="var(--color-text-subtle)" fontSize={10} />
+                <YAxis stroke="var(--color-text-subtle)" fontSize={10} />
+                <Tooltip contentStyle={chartTooltipStyle} />
+                <Bar dataKey="vehicles" fill="#8b5cf6" radius={[6, 6, 0, 0]} name="Assigned Vehicles" />
+                <Bar dataKey="complianceScore" fill="#10b981" radius={[6, 6, 0, 0]} name="Safety Compliance %" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Chart 6: Corridor Risk & Active Vehicle Density */}
+        <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-card hover:border-[var(--color-border-strong)] transition-all duration-300 space-y-4">
+          <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
+            <div>
+              <h3 className="font-bold text-[var(--color-text)] text-sm tracking-tight">
+                Corridor Risk Index & Density
+              </h3>
+              <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
+                Corridor risk scores and active vehicle load
+              </p>
+            </div>
+            <span className="text-[10px] font-mono px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium">
+              Risk Matrix
+            </span>
+          </div>
+          <div className="h-56 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={corridorRiskData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.6} />
+                <XAxis dataKey="name" stroke="var(--color-text-subtle)" fontSize={10} />
+                <YAxis stroke="var(--color-text-subtle)" fontSize={10} domain={[0, 100]} />
+                <Tooltip contentStyle={chartTooltipStyle} />
+                <Bar dataKey="riskScore" fill="#ef4444" radius={[6, 6, 0, 0]} name="Risk Index" />
+                <Bar dataKey="activeVehicles" fill="#06b6d4" radius={[6, 6, 0, 0]} name="Active Vehicles" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      {/* Live Dispatches Operational Feed Table */}
+      <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-card space-y-4">
+        <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
+          <div>
+            <h3 className="font-bold text-[var(--color-text)] text-sm flex items-center space-x-2">
+              <Truck className="w-4 h-4 text-blue-400" />
+              <span>Real-Time Siding Dispatches & Active Coal Movements</span>
+            </h3>
+            <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
+              Showing active trips with origin, destination, net payload tonnage, and electronic seal status
+            </p>
+          </div>
+          <button
+            onClick={() => onNavigateTab('transportation-movements')}
+            className="text-xs font-semibold text-blue-400 hover:text-blue-300 flex items-center space-x-1.5 transition-colors"
+          >
+            <span>View All Movements ({coalMovements.length})</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-[var(--color-border)] text-[var(--color-text-muted)] text-[11px] uppercase tracking-wider font-semibold">
+                <th className="py-3 px-3">Trip ID</th>
+                <th className="py-3 px-3">Vehicle & Transporter</th>
+                <th className="py-3 px-3">Driver</th>
+                <th className="py-3 px-3">Origin Mine & Loading Point</th>
+                <th className="py-3 px-3">Destination</th>
+                <th className="py-3 px-3 text-right">Net Tonnes</th>
+                <th className="py-3 px-3 text-center">Status</th>
+                <th className="py-3 px-3 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--color-border)]/50 font-sans">
+              {coalMovements.slice(0, 6).map((m) => (
+                <tr key={m.id} className="hover:bg-[var(--color-surface-2)] transition-colors duration-150">
+                  <td className="py-3 px-3 font-mono font-semibold text-blue-400">
+                    {m.id}
+                  </td>
+                  <td className="py-3 px-3">
+                    <div className="font-semibold text-[var(--color-text)]">{m.vehiclePlate}</div>
+                    <div className="text-[10px] text-[var(--color-text-subtle)]">{m.transporterName}</div>
+                  </td>
+                  <td className="py-3 px-3 text-[var(--color-text-muted)]">
+                    {m.driverName}
+                  </td>
+                  <td className="py-3 px-3">
+                    <div className="text-[var(--color-text)]">{m.originMineName}</div>
+                    <div className="text-[10px] text-[var(--color-text-subtle)] truncate max-w-[150px]">{m.loadingPoint}</div>
+                  </td>
+                  <td className="py-3 px-3">
+                    <div className="text-[var(--color-text)] truncate max-w-[150px]">{m.destinationName}</div>
+                    <div className="text-[10px] text-[var(--color-text-subtle)]">{m.destinationType}</div>
+                  </td>
+                  <td className="py-3 px-3 text-right font-mono font-bold text-[var(--color-text)]">
+                    {m.dispatchedNetTonnes} MT
+                  </td>
+                  <td className="py-3 px-3 text-center">
+                    <StatusChip
+                      label={m.status.replace(/_/g, ' ')}
+                      tone={
+                        m.status === 'IN_TRANSIT'
+                          ? 'warning'
+                          : m.status === 'RECONCILED'
+                          ? 'success'
+                          : m.status === 'DISCREPANCY_FLAGGED'
+                          ? 'danger'
+                          : m.status === 'LOADING'
+                          ? 'info'
+                          : 'neutral'
+                      }
+                      size="sm"
+                    />
+                  </td>
+                  <td className="py-3 px-3 text-right">
+                    <button
+                      onClick={() =>
+                        m.status === 'DISCREPANCY_FLAGGED' || m.status === 'IN_TRANSIT'
+                          ? onNavigateTab('transportation-reconciliation')
+                          : onNavigateTab('transportation-movements')
+                      }
+                      className="px-2.5 py-1 bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] text-[var(--color-text)] text-[11px] font-medium rounded-lg border border-[var(--color-border)] active:scale-95 transition-all"
+                    >
+                      Inspect
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="p-6 space-y-6 max-w-7xl mx-auto font-sans">
+      {/* Scope Header Greeting Banner */}
+      <Reveal direction="up" delay={0.02}>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[var(--color-surface)] border border-[var(--color-border)] p-5 rounded-2xl shadow-card">
+          <div>
+            <div className="flex items-center space-x-2">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold text-blue-400 bg-blue-500/10 border border-blue-500/20 uppercase tracking-widest">
+                {headerInfo.scopeChip}
+              </span>
+              <span className="text-xs text-[var(--color-text-subtle)] font-medium">| {currentUser?.name}</span>
+            </div>
+            <h1 className="text-xl font-bold text-[var(--color-text)] mt-1 tracking-tight">
+              {headerInfo.title}
+            </h1>
+            <p className="text-xs text-[var(--color-text-muted)] mt-1">
+              {headerInfo.subtitle}
+            </p>
+          </div>
+
+          {/* Dynamic Action Buttons */}
+          <div className="shrink-0">{renderQuickActions()}</div>
+        </div>
+      </Reveal>
+
+      {/* Role-Specific Metric Cards Grid */}
+      <Reveal direction="up" delay={0.06}>
+        <div className={`grid grid-cols-2 sm:grid-cols-3 ${role === 'Transportation Head' ? 'lg:grid-cols-5' : 'lg:grid-cols-6'} gap-3.5`}>
+          {renderRoleCards()}
+        </div>
+      </Reveal>
+
+      {/* Analytical Charts & Tactical Panels */}
+      <Reveal direction="up" delay={0.12}>
+        {role === 'Transportation Head' ? (
+          renderTransportationAnalytics()
+        ) : (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Chart 1: 6-Month Risk & Compliance Trends */}
+              <div className="lg:col-span-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-card hover:border-[var(--color-border-strong)] transition-all duration-300 space-y-4">
+                <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
+                  <div>
+                    <h3 className="font-bold text-[var(--color-text)] text-sm tracking-tight">
+                      {t('chart_risk_trend', 'Risk Score Evolution (Last 6 Months)')}
+                    </h3>
+                    <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
+                      {t('chart_compliance_trend', 'Statutory Compliance Index Across Sectors')}
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-mono px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium">
+                    CMR 2017 KPI
+                  </span>
+                </div>
+
+                <div className="h-64 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={riskTrendData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.6} />
+                      <XAxis dataKey="month" stroke="var(--color-text-subtle)" fontSize={11} />
+                      <YAxis stroke="var(--color-text-subtle)" fontSize={11} domain={[0, 100]} />
+                      <Tooltip contentStyle={chartTooltipStyle} />
+                      <Line
+                        type="monotone"
+                        dataKey="enterpriseRisk"
+                        name={t('field_risk_score', 'AI Risk Score')}
+                        stroke="#ef4444"
+                        strokeWidth={2.5}
+                        dot={{ r: 3 }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="complianceIndex"
+                        name={t('kpi_compliance_score', 'Compliance Score')}
+                        stroke="#10b981"
+                        strokeWidth={2.5}
+                        dot={{ r: 3 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Chart 2: Pipeline Distribution / Open vs Closed */}
+              <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-card hover:border-[var(--color-border-strong)] transition-all duration-300 space-y-4 flex flex-col justify-between">
+                <div>
+                  <div className="border-b border-[var(--color-border)] pb-3">
+                    <h3 className="font-bold text-[var(--color-text)] text-sm tracking-tight">
+                      {t('chart_open_vs_closed', 'Corrective Action Remediation Pipeline')}
+                    </h3>
+                    <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
+                      Closed vs In-Remediation vs Under-Verification
+                    </p>
+                  </div>
+
+                  <div className="h-44 w-full mt-2">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={openVsClosedData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={46}
+                          outerRadius={66}
+                          paddingAngle={4}
+                          dataKey="value"
+                        >
+                          {openVsClosedData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip contentStyle={chartTooltipStyle} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Legend */}
+                <div className="space-y-1.5 text-xs pt-2 border-t border-[var(--color-border)]">
+                  {openVsClosedData.map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }}></span>
+                        <span className="text-[var(--color-text-muted)]">{item.name}</span>
+                      </div>
+                      <span className="font-bold text-[var(--color-text)] font-mono">{item.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Sector Comparison Bar Chart (for Multi-mine Roles) */}
+            {(role === 'Coal Mine Manager' || role === 'Area Manager' || role === 'Regulatory Authority') && (
+              <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-card hover:border-[var(--color-border-strong)] transition-all duration-300 space-y-4">
+                <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
+                  <div>
+                    <h3 className="font-bold text-[var(--color-text)] text-sm tracking-tight">
+                      {t('chart_mine_risk_comparison', 'Mine-wise Risk Score Comparison')}
+                    </h3>
+                    <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
+                      Comparative analysis of risk scores vs statutory compliance indices
+                    </p>
+                  </div>
+                </div>
+
+                <div className="h-52 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={mineComparisonData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.6} />
+                      <XAxis dataKey="name" stroke="var(--color-text-subtle)" fontSize={10} />
+                      <YAxis stroke="var(--color-text-subtle)" fontSize={10} domain={[0, 100]} />
+                      <Tooltip contentStyle={chartTooltipStyle} />
+                      <Bar dataKey="riskScore" name={t('field_risk_score', 'AI Risk Score')} fill="#ef4444" radius={[6, 6, 0, 0]} />
+                      <Bar dataKey="complianceScore" name={t('kpi_compliance_score', 'Compliance Score')} fill="#3b82f6" radius={[6, 6, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </Reveal>
     </div>
   );
 };

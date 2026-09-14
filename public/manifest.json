@@ -1,0 +1,17 @@
+{
+  "name": "CoalTech — Smart Governance & Compliance for Coal Mines",
+  "short_name": "CoalTech",
+  "description": "Enterprise Digital Operating System for Coal Mine Governance, CMR 2017 Safety, Weighbridge Siding Logistics & Cryptographic Ledger",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#0284c7",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

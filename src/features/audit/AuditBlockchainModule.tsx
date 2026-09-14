@@ -1,8 +1,9 @@
 // MINEGOV AI - Tamper-Evident Audit Ledger & Blockchain Module
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useGovernance } from '../../context/GovernanceContext';
 import { useI18n } from '../../context/I18nContext';
 import { formatDateTime } from '../../utils/formatters';
+import { runCryptographicIntegrityCheck } from '../../services/auditBlockchainService';
 import {
   Database,
   ShieldCheck,
@@ -10,6 +11,8 @@ import {
   AlertTriangle,
   Lock,
   Search,
+  RotateCcw,
+  Bug,
 } from 'lucide-react';
 
 export const AuditBlockchainModule: React.FC = () => {
@@ -19,13 +22,56 @@ export const AuditBlockchainModule: React.FC = () => {
   const [verificationResult, setVerificationResult] = useState<{ isValid: boolean; message: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBlock, setSelectedBlock] = useState<any | null>(null);
+  const [isTampered, setIsTampered] = useState(false);
+
+  const displayBlocks = useMemo(() => {
+    if (!isTampered || blockchainBlocks.length < 2) return blockchainBlocks;
+    return blockchainBlocks.map((b, idx) => {
+      if (idx === 1) {
+        return {
+          ...b,
+          currentHash: '0xdeadbeef00000000000000000000000000000000000000000000000000000000',
+          action: `${b.action} [UNAUTHORIZED STATE MUTATION]`,
+        };
+      }
+      return b;
+    });
+  }, [blockchainBlocks, isTampered]);
 
   const handleVerify = () => {
+    if (isTampered) {
+      const res = runCryptographicIntegrityCheck(displayBlocks);
+      setVerificationResult(res);
+    } else {
+      const res = verifyLedgerIntegrity();
+      setVerificationResult(res);
+    }
+  };
+
+  const handleSimulateTamper = () => {
+    setIsTampered(true);
+    // Automatically verify tampered blocks to show immediate feedback
+    const tamperedList = blockchainBlocks.map((b, idx) => {
+      if (idx === 1) {
+        return {
+          ...b,
+          currentHash: '0xdeadbeef00000000000000000000000000000000000000000000000000000000',
+          action: `${b.action} [UNAUTHORIZED STATE MUTATION]`,
+        };
+      }
+      return b;
+    });
+    const res = runCryptographicIntegrityCheck(tamperedList);
+    setVerificationResult(res);
+  };
+
+  const handleRestoreIntegrity = () => {
+    setIsTampered(false);
     const res = verifyLedgerIntegrity();
     setVerificationResult(res);
   };
 
-  const filteredBlocks = blockchainBlocks.filter((b) => {
+  const filteredBlocks = displayBlocks.filter((b) => {
     return (
       b.actor.toLowerCase().includes(searchQuery.toLowerCase()) ||
       b.action.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -49,13 +95,35 @@ export const AuditBlockchainModule: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={handleVerify}
-          className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold shadow-md transition"
-        >
-          <ShieldCheck className="w-4 h-4" />
-          <span>{t('btn_verify_ledger', 'Verify Ledger Cryptographic Integrity')}</span>
-        </button>
+        <div className="flex items-center flex-wrap gap-2">
+          {!isTampered ? (
+            <button
+              onClick={handleSimulateTamper}
+              className="flex items-center space-x-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 dark:text-rose-300 border border-rose-300 dark:border-rose-800 rounded-xl text-xs font-semibold shadow-sm transition"
+              title="Demonstrate tamper detection by simulating an unauthorized hash alteration"
+            >
+              <Bug className="w-3.5 h-3.5 text-rose-500" />
+              <span>Simulate Tamper Test</span>
+            </button>
+          ) : (
+            <button
+              onClick={handleRestoreIntegrity}
+              className="flex items-center space-x-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 rounded-xl text-xs font-semibold shadow-sm transition"
+              title="Restore genuine SHA-256 ledger integrity"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-emerald-500" />
+              <span>Restore Ledger Integrity</span>
+            </button>
+          )}
+
+          <button
+            onClick={handleVerify}
+            className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold shadow-md transition"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            <span>{t('btn_verify_ledger', 'Verify Ledger Cryptographic Integrity')}</span>
+          </button>
+        </div>
       </div>
 
       {/* Prototype Disclaimer Alert */}
@@ -117,27 +185,43 @@ export const AuditBlockchainModule: React.FC = () => {
 
       {/* Block Chain Visualizer List */}
       <div className="space-y-3">
-        {filteredBlocks.map((block) => (
-          <div
-            key={block.id}
-            onClick={() => setSelectedBlock(block)}
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-sky-400/40 rounded-xl p-4 shadow-sm transition cursor-pointer space-y-2.5"
-          >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div className="flex items-center space-x-2">
-                <span className="px-2 py-0.5 rounded bg-sky-500/10 text-sky-600 dark:text-sky-400 font-mono font-bold text-xs border border-sky-400/20">
-                  Block #{block.blockNumber}
-                </span>
-                <span className="font-bold text-xs text-slate-900 dark:text-white">{block.action}</span>
-                <span className="text-[11px] text-slate-400 font-medium">by {block.actor}</span>
+        {filteredBlocks.map((block) => {
+          const isTamperedBlock = isTampered && (block.blockNumber === 1 || block.blockNumber === 2);
+          return (
+            <div
+              key={block.id}
+              onClick={() => setSelectedBlock(block)}
+              className={`bg-white dark:bg-slate-900 border rounded-xl p-4 shadow-sm transition cursor-pointer space-y-2.5 ${
+                isTamperedBlock
+                  ? 'border-rose-400 dark:border-rose-700/80 bg-rose-50/20 dark:bg-rose-950/10'
+                  : 'border-slate-200 dark:border-slate-800 hover:border-sky-400/40'
+              }`}
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center space-x-2">
+                  <span className={`px-2 py-0.5 rounded font-mono font-bold text-xs border ${
+                    isTamperedBlock
+                      ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-400/30'
+                      : 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-400/20'
+                  }`}>
+                    Block #{block.blockNumber}
+                  </span>
+                  <span className="font-bold text-xs text-slate-900 dark:text-white">{block.action}</span>
+                  <span className="text-[11px] text-slate-400 font-medium">by {block.actor}</span>
+                </div>
+                <div className="flex items-center space-x-2 text-[10px] text-slate-400">
+                  <span>{formatDateTime(block.timestamp)}</span>
+                  {isTamperedBlock ? (
+                    <span className="px-2 py-0.5 rounded bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold border border-rose-400/40 animate-pulse">
+                      {block.blockNumber === 1 ? 'TAMPER DETECTED' : 'LINKAGE BROKEN'}
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 font-bold border border-emerald-300">
+                      VERIFIED
+                    </span>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center space-x-2 text-[10px] text-slate-400">
-                <span>{formatDateTime(block.timestamp)}</span>
-                <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 font-bold border border-emerald-300">
-                  VERIFIED
-                </span>
-              </div>
-            </div>
 
             {/* Hashes Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 bg-slate-50 dark:bg-slate-850 p-2.5 rounded-lg font-mono text-[11px]">
@@ -155,7 +239,8 @@ export const AuditBlockchainModule: React.FC = () => {
               </div>
             </div>
           </div>
-        ))}
+        );
+      })}
       </div>
 
       {/* Block Details Modal */}
